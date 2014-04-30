@@ -1,3 +1,4 @@
+import Data.List
 import Text.XML.Light
 
 data Rectangle = Rectangle {
@@ -37,9 +38,13 @@ svgRectangle (Rectangle x y w h b) = unode "rect" [Attr (unqual "x") (show x),
                                                    Attr (unqual "width") (show w),
                                                    Attr (unqual "height") (show h),
                                                    Attr (unqual "stroke-width") (show b),
-                                                   Attr (unqual "stroke") "white",
-                                                   Attr (unqual "fill") "none"]
+                                                   Attr (unqual "stroke") "black",
+                                                   Attr (unqual "fill") "white",
+                                                   Attr (unqual "fill-opacity") "0.3"]
 svgCtm :: Double -> Double -> Tree -> Element
 svgCtm width height tree = unode "svg" ([Attr (unqual "width") (show width),
                                         Attr (unqual "height") (show height)],
-                                        (map svgRectangle $ ctm X (Rectangle 0 0 width height 10) tree))
+                                        (map svgRectangle $
+                                         sortBy borderSort $
+                                         ctm X (Rectangle 0 0 width height 10) tree))
+  where borderSort r0 r1 = compare (rectangleB r1) (rectangleB r0)
