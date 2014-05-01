@@ -1,18 +1,18 @@
 module SpecifyTree where
 
+import Data.Map (Map, fromList, fromListWith, findWithDefault, (!))
 import Text.JSON
+import CTM
 
 data SpecifyTreeNode = SpecifyTreeNode {
   nodeId :: Int,
   rankId :: Int,
-  parentId :: Maybe Int,
+  parentId :: Int,
   name :: String,
   count :: Int
   } deriving Show
 
 data SpecifyTree = SpecifyTree [SpecifyTreeNode] deriving Show
-
-testJSON = "[[1, 0, null, \"Fish\", 0], [2, 60, 15797, \"Cephalaspidomorphi\", 0]]"
 
 fromResult (Ok v) = v
 fromResult r = error $ "not ok" ++ (show r)
@@ -24,8 +24,8 @@ instance JSON SpecifyTreeNode where
     nodeId = (getVal vals 0),
     rankId = (getVal vals 1),
     parentId = case (getVal vals 2) of
-      JSNull -> Nothing
-      v -> Just $ fromResult $ readJSON v,
+      JSNull -> (-1)
+      v -> fromResult $ readJSON v,
 
     name = (getVal vals 3),
     count = (getVal vals 4)
@@ -37,3 +37,26 @@ instance JSON SpecifyTree where
   readJSON (JSArray rows) = Ok $ SpecifyTree $ map (fromResult . readJSON) rows
 
   showJSON = undefined
+
+groupByParent :: SpecifyTree -> Map Int [SpecifyTreeNode]
+groupByParent (SpecifyTree nodes) = fromListWith (++) [(parentId n, [n]) | n <- nodes]
+
+nodesById :: SpecifyTree -> Map Int SpecifyTreeNode
+nodesById (SpecifyTree nodes) = fromList [(nodeId n, n) | n <- nodes]
+
+specifyToTree :: SpecifyTree -> Tree
+specifyToTree specifyTree = treeFromNodeId byId byParent (-1)
+  where byId = nodesById specifyTree
+        byParent = groupByParent specifyTree
+
+treeFromNodeId :: Map Int SpecifyTreeNode -> Map Int [SpecifyTreeNode] -> Int -> Tree
+treeFromNodeId byId byParent nId = Tree size childs
+  where thisSize = if nId == (-1) then 0 else (count $ byId ! nId)
+        childNodes = findWithDefault [] nId byParent
+        childs = map (treeFromNodeId byId byParent) $ map nodeId childNodes
+        size = (fromIntegral thisSize) + (sum $ map (\(Tree size _) -> size) childs)
+
+treeFromJson :: String -> Tree
+treeFromJson s = case (decode s) of
+  (Ok st) -> specifyToTree st
+  _ -> error "couldn't parse json"

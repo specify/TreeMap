@@ -1,3 +1,5 @@
+module CTM where
+
 import Data.List
 import Text.XML.Light
 
@@ -25,6 +27,7 @@ partitionRect d (Rectangle x y w h b) s0 ss = tail $ scanl (shiftRect d) r0 ws
         shiftRect Y (Rectangle x y w h b) h' = Rectangle x       (y + h) w  h'  (0.5*b)
 
 ctm :: Dir -> Rectangle -> Tree -> [Rectangle]
+ctm _ _ (Tree 0 _) = []
 ctm d r (Tree _ []) = [r]
 ctm d r (Tree size children) = r : (concat $ map (\(r, c) -> ctm d' r c) (zip rs children))
   where ss = map treeSize children
@@ -37,14 +40,14 @@ svgRectangle (Rectangle x y w h b) = unode "rect" [Attr (unqual "x") (show x),
                                                    Attr (unqual "y") (show y),
                                                    Attr (unqual "width") (show w),
                                                    Attr (unqual "height") (show h),
-                                                   Attr (unqual "stroke-width") (show b),
+                                                   Attr (unqual "stroke-width") "1",
                                                    Attr (unqual "stroke") "black",
-                                                   Attr (unqual "fill") "white",
-                                                   Attr (unqual "fill-opacity") "0.3"]
+                                                   Attr (unqual "fill") "none"]
+                                                   -- Attr (unqual "fill-opacity") "0.3"]
 svgCtm :: Double -> Double -> Tree -> Element
 svgCtm width height tree = unode "svg" ([Attr (unqual "width") (show width),
                                         Attr (unqual "height") (show height)],
                                         (map svgRectangle $
                                          sortBy borderSort $
-                                         ctm X (Rectangle 0 0 width height 10) tree))
+                                         ctm X (Rectangle 0 0 width height 1) tree))
   where borderSort r0 r1 = compare (rectangleB r1) (rectangleB r0)
