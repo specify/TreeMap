@@ -53,8 +53,9 @@ treeFromNodeId :: Map Int SpecifyTreeNode -> Map Int [SpecifyTreeNode] -> Int ->
 treeFromNodeId byId byParent nId = Tree size childs
   where thisSize = if nId == (-1) then 0 else (count $ byId ! nId)
         childNodes = findWithDefault [] nId byParent
-        childs = map (treeFromNodeId byId byParent) $ map nodeId childNodes
-        size = (fromIntegral thisSize) + (sum $ map (\(Tree size _) -> size) childs)
+        childs' = map (treeFromNodeId byId byParent) $ map nodeId childNodes
+        childs = if thisSize > 0 then (Tree (fromIntegral thisSize) []) : childs' else childs'
+        size = sum $ map (\(Tree size _) -> size) childs
 
 treeFromJson :: String -> Tree
 treeFromJson s = case (decode s) of
