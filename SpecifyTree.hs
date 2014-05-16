@@ -1,63 +1,77 @@
 module SpecifyTree where
 
+import Control.Applicative
 import Data.Map (Map, fromList, fromListWith, findWithDefault, (!))
 import Text.JSON
 import CTM
 
+type NodeID = Int
+type RankID = Int
+type ParentID = Maybe NodeID
+
 data SpecifyTreeNode = SpecifyTreeNode {
-  nodeId :: Int,
-  rankId :: Int,
-  parentId :: Int,
+  nodeId :: NodeID,
+  rankId :: RankID,
+  parentId :: ParentID,
   name :: String,
   count :: Int
   } deriving Show
 
 data SpecifyTree = SpecifyTree [SpecifyTreeNode] deriving Show
 
-fromResult (Ok v) = v
-fromResult r = error $ "not ok" ++ (show r)
-
-getVal vals n = fromResult $ readJSON $ vals !! n
-
 instance JSON SpecifyTreeNode where
-  readJSON (JSArray vals) = Ok SpecifyTreeNode {
-    nodeId = (getVal vals 0),
-    rankId = (getVal vals 1),
-    parentId = case (getVal vals 2) of
-      JSNull -> (-1)
-      v -> fromResult $ readJSON v,
+  readJSON (JSArray row) = do
+    nodeId   <- getVal row 0
+    rankId   <- getVal row 1
 
-    name = (getVal vals 3),
-    count = (getVal vals 4)
-    }
+    parentId <- case row !! 2 of
+      JSNull -> Ok Nothing
+      v      -> Just <$> readJSON v
+
+    name     <- getVal row 3
+    count    <- getVal row 4
+    return $ SpecifyTreeNode nodeId rankId parentId name count
+
+    where getVal vals n = readJSON $ vals !! n
 
   showJSON = undefined
 
 instance JSON SpecifyTree where
-  readJSON (JSArray rows) = Ok $ SpecifyTree $ map (fromResult . readJSON) rows
+  readJSON (JSArray rows) = SpecifyTree <$> mapM readJSON rows
 
   showJSON = undefined
 
-groupByParent :: SpecifyTree -> Map Int [SpecifyTreeNode]
-groupByParent (SpecifyTree nodes) = fromListWith (++) [(parentId n, [n]) | n <- nodes]
+type NodesByParent = Map ParentID [SpecifyTreeNode]
 
-nodesById :: SpecifyTree -> Map Int SpecifyTreeNode
+groupByParent :: SpecifyTree -> NodesByParent
+groupByParent (SpecifyTree nodes) =
+  fromListWith (++) [(parentId n, [n]) | n <- nodes]
+
+type NodesById = Map NodeID SpecifyTreeNode
+
+nodesById :: SpecifyTree -> NodesById
 nodesById (SpecifyTree nodes) = fromList [(nodeId n, n) | n <- nodes]
 
+makeTree :: NodesById -> NodesByParent -> ParentID -> Tree
+makeTree byId byParent nId = Tree size children
+  where treeFromNodeId = makeTree byId byParent
+        thisSize = case nId of
+          Nothing  -> 0
+          Just nId -> count $ byId ! nId
+        childNodes = findWithDefault [] nId byParent
+        actualChildren = map (treeFromNodeId . Just . nodeId) childNodes
+        childForThis = Tree (fromIntegral thisSize) []
+        children = if thisSize > 0
+                   then childForThis : actualChildren
+                   else actualChildren
+        size = sum [size | (Tree size _) <- children]
+
 specifyToTree :: SpecifyTree -> Tree
-specifyToTree specifyTree = treeFromNodeId byId byParent (-1)
+specifyToTree specifyTree = makeTree byId byParent Nothing
   where byId = nodesById specifyTree
         byParent = groupByParent specifyTree
 
-treeFromNodeId :: Map Int SpecifyTreeNode -> Map Int [SpecifyTreeNode] -> Int -> Tree
-treeFromNodeId byId byParent nId = Tree size childs
-  where thisSize = if nId == (-1) then 0 else (count $ byId ! nId)
-        childNodes = findWithDefault [] nId byParent
-        childs' = map (treeFromNodeId byId byParent) $ map nodeId childNodes
-        childs = if thisSize > 0 then (Tree (fromIntegral thisSize) []) : childs' else childs'
-        size = sum $ map (\(Tree size _) -> size) childs
-
 treeFromJson :: String -> Tree
 treeFromJson s = case (decode s) of
-  (Ok st) -> specifyToTree st
-  _ -> error "couldn't parse json"
+  Ok st -> specifyToTree st
+  _     -> error "couldn't parse json"
