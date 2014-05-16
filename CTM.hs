@@ -1,11 +1,13 @@
 module CTM where
 
+import Control.Monad
 import Text.Printf
 import GHC.Float
 import Data.List
 import Data.Map (fromList, findWithDefault)
 import Text.XML.Light
 import Codec.Picture
+import Codec.Picture.Types (createMutableImage, unsafeFreezeImage)
 
 colors = ["White", "Silver", "Gray", "Red", "Maroon", "Yellow", "Olive",
           "Lime", "Green", "Aqua", "Teal", "Blue", "Navy", "Fuchsia", "Purple"]
@@ -85,7 +87,16 @@ imageCtm w h tree = generateImage fromPixels w h
              ctm (Rectangle 0 0 (fromIntegral w) (fromIntegral h) 1) tree
 
 writePngCtm :: Int -> Int -> Tree -> FilePath -> IO ()
-writePngCtm w h tree path = writePng path $ imageCtm w h tree
+-- writePngCtm w h tree path = writePng path $ imageCtm w h tree
+writePngCtm w h tree path = mutableImageCtm w h tree >>= writePng path
+
+mutableImageCtm:: Int -> Int -> Tree -> IO (Image Pixel8)
+mutableImageCtm w h tree = do
+  let r0 = Rectangle 0 0 (fromIntegral w) (fromIntegral h) 1
+  let pixels = concat $ map renderCushion $ ctm r0 tree
+  img <- createMutableImage w h 0
+  forM_ pixels (\(x,y,p) -> writePixel img x y $ round p)
+  unsafeFreezeImage img
 
 -- svgRectangle :: String -> Rectangle -> Element
 -- svgRectangle color (Rectangle x y w h b) =
