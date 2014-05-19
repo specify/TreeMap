@@ -24,32 +24,33 @@ data Rectangle = Rectangle {
 
 data Dir = X | Y deriving (Show, Eq)
 
-data Tree = Tree Double [Tree]
-          deriving (Show)
+type TreeSize = Double
 
-treeSize (Tree size _) = size
+data Tree = Tree {
+  treeSize :: TreeSize,
+  children :: [Tree]
+  } deriving Show
 
-partitionRect :: Dir -> Rectangle -> Double -> [Double] -> [Rectangle]
-partitionRect d (Rectangle x y w h b) s0 ss = tail $ scanl (shiftRect d) r0 ws
-  where r0 = if d == X then Rectangle 0 y x h b else Rectangle x 0 w y b
-        w0  = if d == X then w else h
-        ws = map (\s -> w0*s/s0) ss
+partitionRect :: Dir -> Rectangle -> TreeSize -> [TreeSize] -> [Rectangle]
+partitionRect dir (Rectangle x y w h b) size childSizes = tail $ scanl (shiftRect dir) r0 widths
+  where (w0, r0) = case dir of
+          X -> (w, Rectangle 0 y x h b)
+          Y -> (h, Rectangle x 0 w y b)
+        widths = [w0 * s/size | s <- childSizes]
         shiftRect X (Rectangle x y w h b) w' = Rectangle (x + w) y       w' h   (0.5*b)
         shiftRect Y (Rectangle x y w h b) h' = Rectangle x       (y + h) w  h'  (0.5*b)
 
 f = 0.75
 
 ctm :: Rectangle -> Tree -> [(Rectangle, Surface)]
-ctm r t = ctmSub True 0.5 X r (Surface 0 0 0 0) t
-
-ctmSub :: Bool -> Double -> Dir -> Rectangle -> Surface -> Tree -> [(Rectangle, Surface)]
-ctmSub _ _ _ _ _ (Tree 0  _) = []
-ctmSub root h d r s (Tree _ []) = [(r, if root then s else addRidge h d r s)]
-ctmSub root h d r s (Tree size children) = concat $ map (\(r, c) -> ctmSub False (f*h) d' r s' c) $ zip rs children
-  where ss = map treeSize children
-        rs = partitionRect d r size ss
-        d' = if d == X then Y else X
-        s' = if root then s else addRidge h d r s
+ctm rect tree = ctm' 0.5 X rect (Surface 0 0 0 0) tree
+  where ctm' h d r s (Tree _    []      ) = [(r, s)]
+        ctm' h d r s (Tree size children) =
+          concat [ctm' h' d' r' (addRidge h' d' r' s) t' | (r',t') <- zip childRects children]
+          where childSizes = map treeSize children
+                childRects = partitionRect d r size childSizes
+                d' = case d of X -> Y; Y -> X
+                h' = f * h
 
 addRidge :: Double -> Dir -> Rectangle -> Surface -> Surface
 addRidge h X r s = Surface s1' s2' sy1 sy2
