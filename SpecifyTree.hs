@@ -52,22 +52,27 @@ type NodesById = Map NodeID SpecifyTreeNode
 nodesById :: SpecifyTree -> NodesById
 nodesById (SpecifyTree nodes) = fromList [(nodeId n, n) | n <- nodes]
 
-makeTree :: NodesById -> NodesByParent -> ParentID -> Tree
-makeTree byId byParent nId = Tree size children
-  where treeFromNodeId = makeTree byId byParent
-        thisSize = case nId of
-          Nothing  -> 0
-          Just nId -> count $ byId ! nId
-        childNodes = findWithDefault [] nId byParent
-        actualChildren = map (treeFromNodeId . Just . nodeId) childNodes
-        childForThis = Tree (fromIntegral thisSize) []
+makeTree :: NodesById -> NodesByParent -> Maybe Family -> Maybe NodeID -> Tree
+makeTree byId byParent family nId = Tree family' size children
+  where size = sum [size | (Tree _ size _) <- children]
         children = if thisSize > 0
                    then childForThis : actualChildren
                    else actualChildren
-        size = sum [size | (Tree size _) <- children]
+        thisSize = case nId of
+          Nothing  -> 0
+          Just nId -> count $ byId ! nId
+        childForThis = Tree family' (fromIntegral thisSize) []
+        actualChildren = map (treeFromNodeId . Just . nodeId) childNodes
+        treeFromNodeId nId = makeTree byId byParent family' nId
+        childNodes = findWithDefault [] nId byParent
+        family' = case nId of
+          Nothing  -> Nothing
+          Just nId -> if 100 == (rankId $ byId ! nId)
+                      then Just $ name $ byId ! nId
+                      else family
 
 specifyToTree :: SpecifyTree -> Tree
-specifyToTree specifyTree = makeTree byId byParent Nothing
+specifyToTree specifyTree = makeTree byId byParent Nothing Nothing
   where byId = nodesById specifyTree
         byParent = groupByParent specifyTree
 
