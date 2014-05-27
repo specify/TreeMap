@@ -2,8 +2,8 @@ module SpecifyTree where
 
 import Control.Applicative
 import Data.Map (Map, fromList, fromListWith, findWithDefault, (!))
+import Data.Tree
 import Text.JSON
-import CTM
 
 type NodeID = Int
 type RankID = Int
@@ -52,31 +52,25 @@ type NodesById = Map NodeID SpecifyTreeNode
 nodesById :: SpecifyTree -> NodesById
 nodesById (SpecifyTree nodes) = fromList [(nodeId n, n) | n <- nodes]
 
-makeTree :: NodesById -> NodesByParent -> Maybe Family -> Maybe NodeID -> Tree
-makeTree byId byParent family nId = Tree family' size children
-  where size = sum [size | (Tree _ size _) <- children]
-        children = if thisSize > 0
-                   then childForThis : actualChildren
-                   else actualChildren
+makeTree :: NodesById -> NodesByParent  -> Maybe NodeID -> Tree Int
+makeTree byId byParent nId = case children of
+  [child]  | thisSize == 0 -> child
+  children | thisSize  > 0 -> Node size $ (Node thisSize []):children
+  children                 -> Node size children
+  where size = thisSize + sum [size | (Node size _) <- children]
         thisSize = case nId of
           Nothing  -> 0
           Just nId -> count $ byId ! nId
-        childForThis = Tree family' (fromIntegral thisSize) []
-        actualChildren = map (treeFromNodeId . Just . nodeId) childNodes
-        treeFromNodeId nId = makeTree byId byParent family' nId
+        children = map (treeFromNodeId . Just . nodeId) childNodes
+        treeFromNodeId nId = makeTree byId byParent nId
         childNodes = findWithDefault [] nId byParent
-        family' = case nId of
-          Nothing  -> Nothing
-          Just nId -> if 100 == (rankId $ byId ! nId)
-                      then Just $ name $ byId ! nId
-                      else family
 
-specifyToTree :: SpecifyTree -> Tree
-specifyToTree specifyTree = makeTree byId byParent Nothing Nothing
+specifyToTree :: SpecifyTree -> Tree Int
+specifyToTree specifyTree = makeTree byId byParent Nothing
   where byId = nodesById specifyTree
         byParent = groupByParent specifyTree
 
-treeFromJson :: String -> Tree
+treeFromJson :: String -> Tree Int
 treeFromJson s = case (decode s) of
   Ok st -> specifyToTree st
   _     -> error "couldn't parse json"

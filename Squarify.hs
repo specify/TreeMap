@@ -1,18 +1,17 @@
 module Squarify where
 
 import Data.List
+import Data.Tree
 import Text.Printf
 import Text.XML.Light
 import GHC.Exts (sortWith)
-
-import CTM (Tree(..), treeSize, children)
 
 type Length = Double
 type Area = Double
 
 data Rectangle = Rectangle { x, y, w, h :: Length } deriving (Show, Eq)
 
-colors = ["White", "Silver", "Gray", "Red", "Maroon", "Yellow", "Olive",
+colors = ["Silver", "Gray", "Red", "Maroon", "Yellow", "Olive",
           "Lime", "Green", "Aqua", "Teal", "Blue", "Navy", "Fuchsia", "Purple"]
 
 aspectRatio :: Length -> Area -> Double
@@ -62,36 +61,54 @@ makeRow rect areas | h0 > w0   = [rect { h = l, y = y' } |
   where Rectangle x0 y0 w0 h0 = rect
         totalArea = sum areas
 
--- makeTreeMap' rect (Tree _ _ []) = [rect]
-makeTreeMap' rect tree = rect : (concat $ [makeTreeMap' r t | (r, t) <- zip rs subtrees])
+treeSize :: Tree Int -> Double
+treeSize (Node s _) = fromIntegral s
+
+children :: Tree a -> [Tree a]
+children (Node _ c) = c
+
+flattenTree :: Tree a -> [a]
+flattenTree (Node v children) = concatMap flattenTree children ++ [v]
+
+makeTreeMap :: Rectangle -> Tree Int -> Tree Rectangle
+makeTreeMap rect tree = Node rect [makeTreeMap r t | (r, t) <- zip rs subtrees]
   where rs = squarify rect areas []
         areas = map treeSize subtrees
         subtrees = sortWith (\c -> -1 * treeSize c) $
                    filter (\c -> 0 < treeSize c) $
                    children tree
 
-makeTreeMap tree = makeTreeMap' rect tree
-  where rect = Rectangle 0 0 l l
-        l = sqrt $ treeSize tree
+rectsToEls :: Tree Rectangle -> String -> [String] -> Tree Element
+rectsToEls (Node rect children) id colors = Node element els
+  where element = svgRectangle id color rect
+        color = case children of
+          [] -> head colors
+          _  -> "none"
+        els = [rectsToEls tree (id ++ "-" ++ show i) colors' |
+               (tree, i, colors') <- zip3 children [1..] (tails colors)]
 
-svgRectangle :: String -> Rectangle -> Element
-svgRectangle color (Rectangle x y w h) =
-  unode "rect" [Attr (unqual "x") (printf "%.2f" x),
+svgRectangle :: String -> String -> Rectangle -> Element
+svgRectangle id color (Rectangle x y w h) =
+  unode "rect" [Attr (unqual "id") id,
+                Attr (unqual "x") (printf "%.2f" x),
                 Attr (unqual "y") (printf "%.2f" y),
+                Attr (unqual "rx") (printf "%.2f" $ 0.01 * w),
+                Attr (unqual "ry") (printf "%.2f" $ 0.01 * h),
                 Attr (unqual "width") (printf "%.2f" w),
                 Attr (unqual "height") (printf "%.2f" h),
-                Attr (unqual "stroke-width") (printf "%.2f" $ (*) 0.03 $ min w h),
-                Attr (unqual "stroke") "black",
+                -- Attr (unqual "stroke-width") "1", -- (printf "%.2f" $ (*) 0.03 $ min w h),
+                -- Attr (unqual "stroke") "black",
                 Attr (unqual "fill") color
                 -- Attr (unqual "fill-opacity") "0.2"
                ]
 
-svgStm :: Double -> Double -> Tree -> Element
+svgStm :: Double -> Double -> Tree Int -> Element
 svgStm width height tree = unode "svg" ([Attr (unqual "xmlns") "http://www.w3.org/2000/svg",
                                          Attr (unqual "width") (printf "%.0fpx" width),
                                          Attr (unqual "height") (printf "%.0fpx" height),
                                          Attr (unqual "viewBox") (printf "0 0 %f %f" l l)],
-                                        [svgRectangle color rect |
-                                         (color, rect) <- zip (cycle colors) $ makeTreeMap' rect tree])
-    where rect = Rectangle 0 0 l l
-          l = sqrt $ treeSize tree
+                                        reverse $ concat $ levels elements)
+    where
+      elements = rectsToEls (makeTreeMap rect tree) "r" (cycle colors)
+      rect = Rectangle 0 0 l l
+      l = sqrt $ treeSize tree
