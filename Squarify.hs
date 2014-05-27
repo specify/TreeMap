@@ -8,6 +8,9 @@ import GHC.Exts (sortWith)
 
 type Length = Double
 type Area = Double
+type RectId = String
+type Color = String
+type ElName = String
 
 data Rectangle = Rectangle { x, y, w, h :: Length } deriving (Show, Eq)
 
@@ -80,26 +83,26 @@ makeTreeMap rect tree = Node rect [makeTreeMap r t | (r, t) <- zip rs subtrees]
 
 rectsToEls :: Tree Rectangle -> String -> [String] -> Tree Element
 rectsToEls (Node rect children) id colors = Node element els
-  where element = svgRectangle id color rect
-        color = case children of
-          [] -> head colors
-          _  -> "none"
+  where element = svgRectangle id (head colors) rect
+        -- color = case children of
+        --   [] -> head colors
+        --   _  -> "none"
         els = [rectsToEls tree (id ++ "-" ++ show i) colors' |
-               (tree, i, colors') <- zip3 children [1..] (tails colors)]
+               (tree, i, colors') <- zip3 children [1..] (tail $ tails colors)]
 
-svgRectangle :: String -> String -> Rectangle -> Element
+svgRectangle :: String -> Color -> Rectangle -> Element
 svgRectangle id color (Rectangle x y w h) =
   unode "rect" [Attr (unqual "id") id,
-                Attr (unqual "x") (printf "%.2f" x),
-                Attr (unqual "y") (printf "%.2f" y),
-                Attr (unqual "rx") (printf "%.2f" $ 0.01 * w),
-                Attr (unqual "ry") (printf "%.2f" $ 0.01 * h),
-                Attr (unqual "width") (printf "%.2f" w),
-                Attr (unqual "height") (printf "%.2f" h),
-                -- Attr (unqual "stroke-width") "1", -- (printf "%.2f" $ (*) 0.03 $ min w h),
-                -- Attr (unqual "stroke") "black",
-                Attr (unqual "fill") color
-                -- Attr (unqual "fill-opacity") "0.2"
+                 Attr (unqual "x") (printf "%.2f" x),
+                 Attr (unqual "y") (printf "%.2f" y),
+                 Attr (unqual "rx") (printf "%.2f" $ 0.01 * w),
+                 Attr (unqual "ry") (printf "%.2f" $ 0.01 * h),
+                 Attr (unqual "width") (printf "%.2f" w),
+                 Attr (unqual "height") (printf "%.2f" h),
+                 -- Attr (unqual "stroke-width") (printf "%.2f" $ (*) 0.03 $ min w h),
+                 -- Attr (unqual "stroke") "black",
+                 Attr (unqual "fill") color
+                 -- Attr (unqual "fill-opacity") "0.2"
                ]
 
 svgStm :: Double -> Double -> Tree Int -> Element
@@ -107,7 +110,7 @@ svgStm width height tree = unode "svg" ([Attr (unqual "xmlns") "http://www.w3.or
                                          Attr (unqual "width") (printf "%.0fpx" width),
                                          Attr (unqual "height") (printf "%.0fpx" height),
                                          Attr (unqual "viewBox") (printf "0 0 %f %f" l l)],
-                                        reverse $ concat $ levels elements)
+                                        concat $ levels elements)
     where
       elements = rectsToEls (makeTreeMap rect tree) "r" (cycle colors)
       rect = Rectangle 0 0 l l
