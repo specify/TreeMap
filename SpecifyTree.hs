@@ -5,6 +5,8 @@ import Data.Map (Map, fromList, fromListWith, findWithDefault, (!))
 import Data.Tree
 import Text.JSON
 
+import Squarify (TreeMapTree(..))
+
 type NodeID = Int
 type RankID = Int
 type ParentID = Maybe NodeID
@@ -14,6 +16,7 @@ data SpecifyTreeNode = SpecifyTreeNode {
   rankId :: RankID,
   parentId :: ParentID,
   name :: String,
+  fullName :: String,
   count :: Int
   } deriving Show
 
@@ -29,8 +32,9 @@ instance JSON SpecifyTreeNode where
       v      -> Just <$> readJSON v
 
     name     <- getVal row 3
-    count    <- getVal row 4
-    return $ SpecifyTreeNode nodeId rankId parentId name count
+    fullName <- getVal row 4
+    count    <- getVal row 5
+    return $ SpecifyTreeNode nodeId rankId parentId name fullName count
 
     where getVal vals n = readJSON $ vals !! n
 
@@ -52,25 +56,26 @@ type NodesById = Map NodeID SpecifyTreeNode
 nodesById :: SpecifyTree -> NodesById
 nodesById (SpecifyTree nodes) = fromList [(nodeId n, n) | n <- nodes]
 
-makeTree :: NodesById -> NodesByParent  -> Maybe NodeID -> Tree Int
+makeTree :: NodesById -> NodesByParent  -> Maybe NodeID -> TreeMapTree
 makeTree byId byParent nId = case children of
   [child]  | thisSize == 0 -> child
-  children | thisSize  > 0 -> Node size $ (Node thisSize []):children
-  children                 -> Node size children
-  where size = thisSize + sum [size | (Node size _) <- children]
-        thisSize = case nId of
-          Nothing  -> 0
-          Just nId -> count $ byId ! nId
+  children | thisSize  > 0 -> Node (size, name) $ (Node (thisSize, name) []):children
+  children                 -> Node (size, name) children
+  where size = thisSize + sum [size | (Node (size, _) _) <- children]
+        (thisSize, name) = case nId of
+          Nothing  -> (0, "")
+          Just nId -> (count n, fullName n)
+            where n = byId ! nId
         children = map (treeFromNodeId . Just . nodeId) childNodes
         treeFromNodeId nId = makeTree byId byParent nId
         childNodes = findWithDefault [] nId byParent
 
-specifyToTree :: SpecifyTree -> Tree Int
+specifyToTree :: SpecifyTree -> TreeMapTree
 specifyToTree specifyTree = makeTree byId byParent Nothing
   where byId = nodesById specifyTree
         byParent = groupByParent specifyTree
 
-treeFromJson :: String -> Tree Int
+treeFromJson :: String -> TreeMapTree
 treeFromJson s = case (decode s) of
   Ok st -> specifyToTree st
   _     -> error "couldn't parse json"
